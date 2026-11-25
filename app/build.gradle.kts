@@ -2,6 +2,10 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val buildNumber = (System.getenv("BUILD_NUMBER") ?: "1").toInt()
+val keystorePath: String? = System.getenv("KEYSTORE_FILE")
+
 android {
     namespace = "com.mmusic.app"
     compileSdk = 34
@@ -9,8 +13,23 @@ android {
         applicationId = "com.mmusic.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = buildNumber
+        versionName = "1.$buildNumber"
+    }
+    signingConfigs {
+        if (keystorePath != null) {
+            create("mmusic") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("mmusic")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
