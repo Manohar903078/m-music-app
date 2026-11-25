@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">M Music</string>
-    <!-- CHANGE THIS to your own Blogger address. Keep ?m=0 at the end. -->
-    <string name="blog_url">https://mmusicofficial.blogspot.com/?m=0</string>
-</resources>
