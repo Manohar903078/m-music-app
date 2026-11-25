@@ -101,6 +101,9 @@ class MainActivity : Activity() {
                 }
             }
         }
+        @Suppress("DEPRECATION")
+        @JavascriptInterface
+        fun version(): Int = packageManager.getPackageInfo(packageName, 0).versionCode
         @JavascriptInterface fun resume() { main.post { controller?.play() } }
         @JavascriptInterface fun pause() { main.post { controller?.pause() } }
         @JavascriptInterface fun seek(ms: Long) { main.post { controller?.seekTo(ms) } }
