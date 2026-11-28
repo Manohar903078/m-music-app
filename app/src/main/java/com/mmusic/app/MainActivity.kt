@@ -41,7 +41,7 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(webView)
 
-        val token = SessionToken(this, ComponentName(this, MusicPlaybackService::class.java))
+        val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         future.addListener({
             controller = future.get()
@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun play(url: String, title: String, artist: String, art: String) {
             runOnUiThread {
-                val intent = Intent(this@MainActivity, MusicPlaybackService::class.java)
+                val intent = Intent(this@MainActivity, PlaybackService::class.java)
                 ContextCompat.startForegroundService(this@MainActivity, intent)
 
                 val metadata = MediaMetadata.Builder()
