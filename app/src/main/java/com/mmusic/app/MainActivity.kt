@@ -1,118 +1,128 @@
 package com.mmusic.app
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.MoreExecutors
+import org.json.JSONObject
 
-class MainActivity : Activity() {
-    private lateinit var web: WebView
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var webView: WebView
     private var controller: MediaController? = null
-    private val main = Handler(Looper.getMainLooper())
-    @Volatile private var playing = false
-    @Volatile private var pos = 0L
-    @Volatile private var dur = 0L
-    @Volatile private var ended = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
-        connectPlayer()
 
-        web = WebView(this)
-        setContentView(web)
-        val s = web.settings
-        s.javaScriptEnabled = true
-        s.domStorageEnabled = true
-        s.mediaPlaybackRequiresUserGesture = false
-        s.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
-        web.addJavascriptInterface(Bridge(), "Android")
-        web.webChromeClient = WebChromeClient()
-        web.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val host = request.url.host ?: ""
-                val inside = listOf("blogspot.com", "youtube.com", "google.com", "gstatic.com", "googleapis.com",
-                    "ytimg.com", "apple.com", "mzstatic.com", "googleusercontent.com")
-                if (inside.any { host.endsWith(it) }) return false
-                startActivity(Intent(Intent.ACTION_VIEW, request.url))
-                return true
-            }
+        webView = WebView(this).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            webViewClient = WebViewClient()
+            webChromeClient = WebChromeClient()
+            addJavascriptInterface(MusicBridge(), "Android")
         }
-        web.loadUrl(getString(R.string.blog_url))
-    }
+        setContentView(webView)
 
-    private fun connectPlayer() {
-        val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
+        val token = SessionToken(this, ComponentName(this, MusicPlaybackService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         future.addListener({
-            val c = future.get()
-            controller = c
-            c.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) { ended = state == Player.STATE_ENDED }
-            })
-            tick()
-        }, { r -> main.post(r) })
+            controller = future.get()
+        }, MoreExecutors.directExecutor())
+
+        // మీ Blogger URL ఇక్కడ పెట్టండి
+        webView.loadUrl("https://official.blogspot.com/")
+
+        // Back button నొక్కినప్పుడు యాప్ క్లోజ్ అవ్వకుండా పేజీ/వ్యూ వెనక్కి వెళ్లేలా
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    // యాప్ మూసేయకుండా బ్యాక్‌గ్రౌండ్‌లో మ్యూజిక్ కొనసాగేలా
+                    moveTaskToBack(true)
+                }
+            }
+        })
     }
 
-    private fun tick() {
-        controller?.let {
-            playing = it.isPlaying
-            pos = it.currentPosition.coerceAtLeast(0)
-            dur = if (it.duration > 0) it.duration else 0
-        }
-        main.postDelayed({ tick() }, 300)
-    }
+    inner class MusicBridge {
+        @JavascriptInterface
+        fun version(): Int = 1
 
-    inner class Bridge {
         @JavascriptInterface
         fun play(url: String, title: String, artist: String, art: String) {
-            main.post {
-                val md = MediaMetadata.Builder().setTitle(title).setArtist(artist)
-                if (art.isNotEmpty()) md.setArtworkUri(Uri.parse(art))
-                ended = false
+            runOnUiThread {
+                val intent = Intent(this@MainActivity, MusicPlaybackService::class.java)
+                ContextCompat.startForegroundService(this@MainActivity, intent)
+
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .build()
+                val item = MediaItem.Builder()
+                    .setUri(url)
+                    .setMediaMetadata(metadata)
+                    .build()
+
                 controller?.apply {
-                    setMediaItem(MediaItem.Builder().setUri(url).setMediaMetadata(md.build()).build())
+                    setMediaItem(item)
                     prepare()
                     play()
                 }
             }
         }
-        @Suppress("DEPRECATION")
+
         @JavascriptInterface
-        fun version(): Int = packageManager.getPackageInfo(packageName, 0).versionCode
-        @JavascriptInterface fun resume() { main.post { controller?.play() } }
-        @JavascriptInterface fun pause() { main.post { controller?.pause() } }
-        @JavascriptInterface fun seek(ms: Long) { main.post { controller?.seekTo(ms) } }
+        fun pause() {
+            runOnUiThread { controller?.pause() }
+        }
+
         @JavascriptInterface
-        fun state(): String = "{\"playing\":$playing,\"pos\":$pos,\"dur\":$dur,\"ended\":$ended}"
+        fun resume() {
+            runOnUiThread { controller?.play() }
+        }
+
+        @JavascriptInterface
+        fun seek(ms: Long) {
+            runOnUiThread { controller?.seekTo(ms) }
+        }
+
+        @JavascriptInterface
+        fun state(): String {
+            val c = controller ?: return """{"playing":false,"pos":0,"dur":0,"ended":false}"""
+            val playing = c.isPlaying
+            val pos = c.currentPosition.coerceAtLeast(0L)
+            val dur = if (c.duration > 0) c.duration else 0L
+            val ended = c.playbackState == Player.STATE_ENDED
+            return JSONObject().apply {
+                put("playing", playing)
+                put("pos", pos)
+                put("dur", dur)
+                put("ended", ended)
+            }.toString()
+        }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (web.canGoBack()) web.goBack() else super.onBackPressed()
+    override fun onDestroy() {
+        controller?.release()
+        super.onDestroy()
     }
 }
