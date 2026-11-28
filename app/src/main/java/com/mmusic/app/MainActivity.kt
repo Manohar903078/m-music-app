@@ -48,7 +48,7 @@ class MainActivity : AppCompatActivity() {
         }, MoreExecutors.directExecutor())
 
         // మీ Blogger URL ఇక్కడ పెట్టండి
-        webView.loadUrl("https://official.blogspot.com/")
+        webView.loadUrl("https://mmusicofficial.blogspot.com/")
 
         // Back button నొక్కినప్పుడు యాప్ క్లోజ్ అవ్వకుండా పేజీ/వ్యూ వెనక్కి వెళ్లేలా
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
